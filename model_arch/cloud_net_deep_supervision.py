@@ -1,0 +1,158 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class CloudNetDeepSupervision(nn.Module):
+    def __init__(self, input_rows=512, input_cols=512, num_of_channels=4, num_of_classes=1):
+        super(CloudNetDeepSupervision, self).__init__()
+        
+        # Encoder
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(num_of_channels, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU()
+        )
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU()
+        )
+        
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+        
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU()
+        )
+        
+        # Bottleneck
+        self.bottleneck = nn.Sequential(
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU()
+        )
+        
+        # Decoder with Deep Supervision
+        self.upconv4 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.dec4 = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU()
+        )
+        
+        self.upconv3 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.dec3 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+        
+        self.upconv2 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
+        self.dec2 = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU()
+        )
+        
+        self.upconv1 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
+        self.dec1 = nn.Sequential(
+            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU()
+        )
+        
+        # Deep supervision outputs
+        self.ds4 = nn.Conv2d(128, num_of_classes, kernel_size=1)
+        self.ds3 = nn.Conv2d(64, num_of_classes, kernel_size=1)
+        self.ds2 = nn.Conv2d(32, num_of_classes, kernel_size=1)
+        
+        # Final output
+        self.final = nn.Conv2d(16, num_of_classes, kernel_size=1)
+        
+        # Upsampling layers for deep supervision
+        self.ds4_upsample = nn.ConvTranspose2d(num_of_classes, num_of_classes, kernel_size=8, stride=8)
+        self.ds3_upsample = nn.ConvTranspose2d(num_of_classes, num_of_classes, kernel_size=4, stride=4)
+        self.ds2_upsample = nn.ConvTranspose2d(num_of_classes, num_of_classes, kernel_size=2, stride=2)
+
+    def forward(self, x):
+        # Encoder
+        conv1 = self.conv1(x)        # [B, 16, 512, 512]
+        pool1 = self.pool(conv1)     # [B, 16, 256, 256]
+        
+        conv2 = self.conv2(pool1)    # [B, 32, 256, 256]
+        pool2 = self.pool(conv2)     # [B, 32, 128, 128]
+        
+        conv3 = self.conv3(pool2)    # [B, 64, 128, 128]
+        pool3 = self.pool(conv3)     # [B, 64, 64, 64]
+        
+        conv4 = self.conv4(pool3)    # [B, 128, 64, 64]
+        pool4 = self.pool(conv4)     # [B, 128, 32, 32]
+        
+        # Bottleneck
+        bottleneck = self.bottleneck(pool4)  # [B, 256, 32, 32]
+        
+        # Decoder with Deep Supervision
+        up4 = self.upconv4(bottleneck)      # [B, 128, 64, 64]
+        up4 = torch.cat([up4, conv4], dim=1) # [B, 256, 64, 64]
+        dec4 = self.dec4(up4)               # [B, 128, 64, 64]
+        ds4_out = self.ds4_upsample(self.ds4(dec4))  # [B, 1, 512, 512]
+        
+        up3 = self.upconv3(dec4)            # [B, 64, 128, 128]
+        up3 = torch.cat([up3, conv3], dim=1) # [B, 128, 128, 128]
+        dec3 = self.dec3(up3)               # [B, 64, 128, 128]
+        ds3_out = self.ds3_upsample(self.ds3(dec3))  # [B, 1, 512, 512]
+        
+        up2 = self.upconv2(dec3)            # [B, 32, 256, 256]
+        up2 = torch.cat([up2, conv2], dim=1) # [B, 64, 256, 256]
+        dec2 = self.dec2(up2)               # [B, 32, 256, 256]
+        ds2_out = self.ds2_upsample(self.ds2(dec2))  # [B, 1, 512, 512]
+        
+        # Final output
+        up1 = self.upconv1(dec2)            # [B, 16, 512, 512]
+        up1 = torch.cat([up1, conv1], dim=1) # [B, 32, 512, 512]
+        dec1 = self.dec1(up1)               # [B, 16, 512, 512]
+        final_out = self.final(dec1)         # [B, 1, 512, 512]
+        
+        return {
+            'final': torch.sigmoid(final_out),
+            'ds2': torch.sigmoid(ds2_out),
+            'ds3': torch.sigmoid(ds3_out),
+            'ds4': torch.sigmoid(ds4_out)
+        }
+    
+def model_arch(input_rows=512, input_cols=512, num_of_channels=4, num_of_classes=1):
+    return CloudNetDeepSupervision(input_rows, input_cols, num_of_channels, num_of_classes)
