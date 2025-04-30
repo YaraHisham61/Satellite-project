@@ -29,25 +29,30 @@
 │   └── inference_dataset.py   # Inference-specific data handler
 │
 ├── inference/                 # Model evaluation scripts
-│   ├── run_inference.py       # Main inference pipeline
+│   ├── evaluation_function.py       # Dice Calculation
 │   └── rle-encoder-decoder.py # RLE encoding/decoding tools
 │
-├── models/                    # Pre-trained model checkpoints
-│   ├── checkpoint_epoch_25.pth
-│   └── checkpoint_epoch_45.pth
+├── losses/                  # Different criterion used in training
 │
 ├── model_arch/                # Model architecture definitions
 │   ├── cloud_net.py           # Base CloudNet model
 │   ├── cloud_net_attention.py # Attention variant
 │   └── cloud_net_deep_supervision.py
 │
+├── models/                    # Pre-trained model checkpoints
+│   ├── checkpoint_epoch_25.pth
+│   └── checkpoint_epoch_45.pth
+│
+│
 ├── notebooks/                 # Jupyter notebooks (Kaggle training, EDA)
 ├── output/                    # Inference outputs
 │   ├── inference_trace.json   # Runtime logs
-│   └── predictions.csv        # Prediction results
+│   ├──  predictions.csv       # Prediction results
+│   └── train_out/             #model logs and gradCAM photos
+│
 │
 ├── report/                    # Project documentation
 │   ├── report.docx            # Editable report
 │   └── report.pdf            # Final deliverable
-│
-└── requirements.txt           # Python dependencies
+├── requirements.txt   # Python dependencies
+└── run_inference.py       # Main inference pipeline       
