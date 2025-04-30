@@ -1,0 +1,4 @@
+outputs/
+testset/
+pycaches/
+__pycache__/
