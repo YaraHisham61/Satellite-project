@@ -1,0 +1,2 @@
+Number of Parameters: 1944507
+Number of Operations (MACs): 2.3367e+10
